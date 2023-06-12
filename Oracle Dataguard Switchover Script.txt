@@ -1,0 +1,93 @@
+1. on Primary And Standby:
+
+Verify no gap of log file between both database
+-Check database status and role
+-Check gap
+
+Verify primary can be swtiched to standby
+- set lines 200 pages 200;
+- Select name,log_mode,controlfile_type,open_mode, database_role,switchover_status, from v$database
+
+Check Temp Files match count in primary and standby
+- col name for a30;
+- Select ts#,name,ts#,status from v$tempfile;
+
+Clear Potential Blocking Parameter $ Jobs
+- Show parameter job_queue_processes
+- Alter System set job_queue_process=0 Scope=both;
+- col Job_name for a30;
+- col End_Date for a30;
+- Select owner, job_name, start_date, end_date, enabled from dba_scheduler_jobs where enabled=true and owner <> 'SYS'
+- execute dbms_schedule.disable(<job_name>);
+
+Create Guaranteed Restore Point on Both database make sure they dropped post sucessful switchover
+- create restore point switchover_test_10April2021 guarantee flashback database;
+- select name,time,guarantee_flashback_database,storage_size/1024/1024/1024 from v$restore_point;
+
+If it's RAC Shutdown secondary primary instances and database
+- srvctl status database -d DB_Unique_name -v
+- srvctl stop instances -d  DB_Unique_name -i Instances_name
+- srvctl status database -d DB_Unique_name -v
+
+Shutdown secondary standby instnace
+- srvctl status database -d DB_Unique_name -v
+- srvctl stop instances -d  DB_Unique_name -i Instances_name
+- srvctl status database -d DB_Unique_name -v
+
+2. On Primary :
+
+Switch Primary to standby role 
+- Alter database commit to switchover to physical standby with session shutdown;
+
+Verify the new standby has recieved end-of-redo (EOR) log(s) in standby alert log
+-shutdown immediate;
+-startup mount;
+
+3. On Standby :
+
+- Check database status and role
+- alter system set_log_archive_dest_2='service= service_name no affirm async valid_for=(online_logifile, primary_role) db_unique_name='';
+- Check gap
+
+Check MRP Process state
+- Select Process,status,sequence# from v$managed_standby
+
+Switch Standby To Primary
+- Alter Database commit to switchover to primary with session shutdown;
+- Alter Database Open;
+- Select name, open_mode, database_role, from v$database;
+
+4. Start Redo Apply on the new physical standby database. 
+- ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+- Alter system set log_archive_dest_state_2=DEFER scope=both;
+
+5. Enabling the log shipping on new Primary
+-Alter System set log_archive_dest_2=Enable scope=both;
+-show parameter job_queue_processess
+-Alter System Set job_queue_processes='Original Value' SCOPE=BOTH;
+
+6. Start secondary new primary instances (IF It's RAC)
+- srvctl status database -d DB_Unique_name -v
+- srvctl stop instances -d  DB_Unique_name -i Instances_name
+- srvctl status database -d DB_Unique_name -v
+
+7. Start secondary new standby instances
+- srvctl status database -d DB_Unique_name -v
+- srvctl stop instances -d  DB_Unique_name -i DB_Unique_name2
+- srvctl status database -d DB_Unique_name -v
+
+8. Schedule backups on new primary and create db links if exist on new primary
+- start all cronjobs and DBMS_SCHEDULER
+
+Note: Post Switchover make sure sufficient temporary table space is exist, if not add it.  
+
+on New Standby :-
+
+-ALTER DATABASE RECOVER MANAGED STANDBY DATABASE CANCEL;
+
+-DROP RESTORE POINT switch_over_test_10April2021;
+
+-ALTER DATABASE RECOVER MANAGED STANDBY DATABASE USING CURRENT LOGFILE DISCONNECT;
+
+
+
