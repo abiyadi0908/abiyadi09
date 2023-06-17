@@ -1,0 +1,345 @@
+Switch over result
+
+-Primary
+SQL> set lines 200 pages 200;
+SQL> Select name,log_mode,controlfile_type,open_mode, database_role,switchover_status from v$database;
+
+NAME	  LOG_MODE     CONTROL OPEN_MODE	    DATABASE_ROLE    SWITCHOVER_STATUS
+--------- ------------ ------- -------------------- ---------------- --------------------
+OL819	  ARCHIVELOG   CURRENT READ WRITE	    PRIMARY	     TO STANDBY
+
+SQL> col name for a30;
+SQL> Select ts#,name,ts#,status from v$tempfile;
+
+       TS# NAME 				 TS# STATUS
+---------- ------------------------------ ---------- -------
+	 3 /u02/oradata/OL819/temp01.dbf	   3 ONLINE
+	 3 /u02/oradata/OL819/pdbseed/tem	   3 ONLINE
+	   p012022-12-26_23-18-28-918-PM.
+	   dbf
+
+	 3 /u02/oradata/OL819/ol819pdb/te	   3 ONLINE
+	   mp01.dbf
+
+
+SQL> Show parameter job_queue_processes;
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+job_queue_processes		     integer	 40
+
+SQL> Alter System set job_queue_processes=0 Scope=both;
+
+System altered.
+
+SQL> select name,time,guarantee_flashback_database,storage_size/1024/1024/1024 from v$restore_point;
+
+NAME			       TIME									   GUA STORAGE_SIZE/1024/1024/1024
+------------------------------ --------------------------------------------------------------------------- --- ---------------------------
+SWITCHOVER_TEST_17JUNE2023     17-JUN-23 11.53.28.000000000 AM						   YES			  .1953125
+
+SQL> Alter database commit to switchover to physical standby with session shutdown;
+
+Database altered.
+
+SQL> startup mount;
+ORACLE instance started.
+
+Total System Global Area 1124073328 bytes
+Fixed Size		    9133936 bytes
+Variable Size		  822083584 bytes
+Database Buffers	  285212672 bytes
+Redo Buffers		    7643136 bytes
+Database mounted.
+
+Select name,log_mode,controlfile_type,open_mode, database_role,switchover_status from v$database;
+
+NAME			       LOG_MODE     CONTROL OPEN_MODE		 DATABASE_ROLE	  SWITCHOVER_STATUS
+------------------------------ ------------ ------- -------------------- ---------------- --------------------
+OL819			       ARCHIVELOG   STANDBY MOUNTED		 PHYSICAL STANDBY RECOVERY NEEDED
+
+SQL> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+
+Database altered.
+
+SQL> show parameter log_archive_dest_state_2;
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+log_archive_dest_state_2	     string	 ENABLE
+log_archive_dest_state_20	     string	 enable
+log_archive_dest_state_21	     string	 enable
+log_archive_dest_state_22	     string	 enable
+log_archive_dest_state_23	     string	 enable
+log_archive_dest_state_24	     string	 enable
+log_archive_dest_state_25	     string	 enable
+log_archive_dest_state_26	     string	 enable
+log_archive_dest_state_27	     string	 enable
+log_archive_dest_state_28	     string	 enable
+log_archive_dest_state_29	     string	 enable
+SQL> Alter system set log_archive_dest_state_2=DEFER scope=both;
+
+System altered.
+
+SQL> show parameter log_archive_dest_state_2;
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+log_archive_dest_state_2	     string	 DEFER
+log_archive_dest_state_20	     string	 enable
+log_archive_dest_state_21	     string	 enable
+log_archive_dest_state_22	     string	 enable
+log_archive_dest_state_23	     string	 enable
+log_archive_dest_state_24	     string	 enable
+log_archive_dest_state_25	     string	 enable
+log_archive_dest_state_26	     string	 enable
+log_archive_dest_state_27	     string	 enable
+log_archive_dest_state_28	     string	 enable
+log_archive_dest_state_29	     string	 enable
+
+SQL> select name,time,guarantee_flashback_database,storage_size/1024/1024/1024 from v$restore_point;
+
+NAME			       TIME									   GUA STORAGE_SIZE/1024/1024/1024
+------------------------------ --------------------------------------------------------------------------- --- ---------------------------
+SWITCHOVER_TEST_17JUNE2023     17-JUN-23 11.53.28.000000000 AM						   YES			  .1953125
+
+SQL> DROP RESTORE POINT switch_over_test_17june2023;
+DROP RESTORE POINT switch_over_test_17june2023
+*
+ERROR at line 1:
+ORA-38780: Restore point 'SWITCH_OVER_TEST_17JUNE2023' does not exist.
+
+
+SQL> DROP RESTORE POINT SWITCHOVER_TEST_17JUNE2023; 
+
+Restore point dropped.
+
+SQL> select name,time,guarantee_flashback_database,storage_size/1024/1024/1024 from v$restore_point;
+
+no rows selected
+
+==================================================================================================================================================
+-Standby
+SQL> set lines 200 pages 200;
+SQL> /
+
+NAME	  LOG_MODE     CONTROL OPEN_MODE	    DATABASE_ROLE    SWITCHOVER_STATUS
+--------- ------------ ------- -------------------- ---------------- --------------------
+OL819	  ARCHIVELOG   STANDBY MOUNTED		    PHYSICAL STANDBY NOT ALLOWED
+
+SQL> col name for a30;
+SQL> Select ts#,name,ts#,status from v$tempfile;
+
+       TS# NAME 				 TS# STATUS
+---------- ------------------------------ ---------- -------
+	 3 /u02/oradata/OL819S/temp01.dbf	   3 ONLINE
+	 3 /u02/oradata/OL819S/pdbseed/te	   3 ONLINE
+	   mp012022-12-26_23-18-28-918-PM
+	   .dbf
+
+	 3 /u02/oradata/OL819S/ol819pdb/t	   3 ONLINE
+	   emp01.dbf
+
+SQL> Show parameter job_queue_processes;
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+job_queue_processes		     integer	 4000
+SQL> Alter System set job_queue_processes=0 Scope=both;
+
+System altered.
+
+SQL> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE CANCEL;
+
+Database altered.
+
+SQL> create restore point switchover_test_17june2023 guarantee flashback database;
+
+Restore point created.
+
+SQL> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE USING CURRENT LOGFILE DISCONNECT;
+
+Database altered.
+
+SQL> select name,time,guarantee_flashback_database,storage_size/1024/1024/1024 from v$restore_point;
+
+NAME			       TIME									   GUA STORAGE_SIZE/1024/1024/1024
+------------------------------ --------------------------------------------------------------------------- --- ---------------------------
+SWITCHOVER_TEST_17JUNE2023     17-JUN-23 12.10.09.000000000 PM						   YES			.111602783
+
+SQL> alter system set log_archive_dest_2='service=ol819, noaffirm async valid_for=(online_logifile,primary_role) db_unique_name=ol819' scope=spfile;
+
+System altered.
+
+SQL> SELECT a.thread#, b. last_seq, a.applied_seq, to_char(a. last_app_timestamp,'MM/DD/YYYY HH24:MI:SS') "last_app_timestamp", b.last_seq-a.applied_seq 
+ARC_DIFF FROM (SELECT  thread#, MAX(sequence#) applied_seq, MAX(next_time) last_app_timestamp 
+FROM gv$archived_log WHERE app  2    3  lied = 'YES' or applied='IN-MEMORY' GROUP BY thread#) a, 
+(SELECT  thread#, MAX (sequence#) last_seq FROM gv$archived_log GROUP BY thread#) b 
+WHERE a.thread# = b.thread#;  4    5  
+
+   THREAD#   LAST_SEQ APPLIED_SEQ last_app_timestamp	ARC_DIFF
+---------- ---------- ----------- ------------------- ----------
+	 1	  125	      125 06/17/2023 12:15:11	       0
+
+SQL> SELECT /*Check gap on stby with difference*/ al.thrd "Thread", almax "Last Seq Received", lhmax "Last Seq Applied", almax-lhmax "Gap", decode(almax-lhmax, 0, 'Sync', 'Gap') "Result"
+FROM (select thread# thrd, MAX(sequence#) almax FROM v$archived_log WHERE resetlogs_change#=(SELECT resetlogs_change# FROM v$database) GROUP BY thread#) al,
+(SELECT thread# thrd, MAX(sequence#) lhmax FROM v$log_history WHERE resetlogs_change#=(SELECT resetlogs_change# FROM v$database) GROUP BY thread#) lh WHERE al.thrd = lh.thrd;  2    3  
+
+    Thread Last Seq Received Last Seq Applied	     Gap Resu
+---------- ----------------- ---------------- ---------- ----
+	 1		 125		  125	       0 Sync
+
+SQL> Select Process,status,sequence# from v$managed_standby;
+
+PROCESS   STATUS	SEQUENCE#
+--------- ------------ ----------
+DGRD	  ALLOCATED		0
+ARCH	  CONNECTED		0
+DGRD	  ALLOCATED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+ARCH	  CONNECTED		0
+MRP0	  WAIT_FOR_LOG	      126
+
+33 rows selected.
+
+SQL> Alter Database commit to switchover to primary with session shutdown;
+
+Database altered.
+
+SQL> Select name, open_mode, database_role from v$database;
+
+NAME			       OPEN_MODE	    DATABASE_ROLE
+------------------------------ -------------------- ----------------
+OL819			       MOUNTED		    PRIMARY
+
+SQL> alter database open;
+
+Database altered.
+
+SQL> show parameter job_queue_processes;    
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+job_queue_processes		     integer	 0
+SQL> Alter System Set job_queue_processes=40 scope=both;
+
+System altered.
+
+SQL> show parameter job_queue_processes;
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+job_queue_processes		     integer	 40
+
+SQL> startup;
+ORA-16026: parameter LOG_ARCHIVE_DEST_2 contains an invalid attribute value
+
+SQL> startup pfile='/u01/app/oracle/product/19.0.0/dbhome_1/dbs/initol819s.ora';
+ORACLE instance started.
+
+Total System Global Area 1124073328 bytes
+Fixed Size		    9133936 bytes
+Variable Size		  687865856 bytes
+Database Buffers	  419430400 bytes
+Redo Buffers		    7643136 bytes
+Database mounted.
+Database opened.
+
+SQL> show parameter spfile;
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+spfile				     string
+SQL> alter system set log_archive_dest_2='service="ol819s", noaffirm async valid_for=(online_logifile,primary_role) db_unique_name=ol819s'; 
+alter system set log_archive_dest_2='service="ol819s", noaffirm async valid_for=(online_logifile,primary_role) db_unique_name=ol819s'
+*
+ERROR at line 1:
+ORA-02097: parameter cannot be modified because specified value is invalid
+ORA-16026: parameter LOG_ARCHIVE_DEST_2 contains an invalid attribute value
+
+
+SQL> alter system set spfile='/u01/app/oracle/product/19.0.0/dbhome_1/dbs/spfileol819s.ora';
+
+System altered.
+                                           
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+spfile				     string	 /u01/app/oracle/product/19.0.0
+						 /dbhome_1/dbs/spfileol819s.ora
+
+SQL> ALTER SYSTEM SET LOG_ARCHIVE_DEST_2='SERVICE=ol819 LGWR ASYNC VALID_FOR=(ALL_LOGFILES,PRIMARY_ROLE)
+DB_UNIQUE_NAME=ol819' SCOPE=BOTH;  2    3    4  
+
+System altered.
+
+SQL> show parameter log_archive_dest_2
+
+NAME				     TYPE	 VALUE
+------------------------------------ ----------- ------------------------------
+log_archive_dest_2		     string	 SERVICE=ol819 LGWR ASYNC
+						 VALID_FOR=(ALL_LOGFILES,PRIMAR
+						 Y_ROLE)
+						 DB_UNIQUE_NAME=ol819
+log_archive_dest_20		     string
+log_archive_dest_21		     string
+log_archive_dest_22		     string
+log_archive_dest_23		     string
+log_archive_dest_24		     string
+log_archive_dest_25		     string
+log_archive_dest_26		     string
+
+SQL> shut immediate;
+Database closed.
+Database dismounted.
+ORACLE instance shut down.
+SQL> startup;
+ORACLE instance started.
+
+Total System Global Area 1124073328 bytes
+Fixed Size		    9133936 bytes
+Variable Size		  973078528 bytes
+Database Buffers	  134217728 bytes
+Redo Buffers		    7643136 bytes
+Database mounted.
+Database opened.
+
+SELECT a.thread#, b. last_seq, a.applied_seq, to_char(a. last_app_timestamp,'MM/DD/YYYY HH24:MI:SS') "last_app_timestamp", b.last_seq-a.applied_seq 
+ARC_DIFF FROM (SELECT  thread#, MAX(sequence#) applied_seq, MAX(next_time) last_app_timestamp 
+FROM gv$archived_log WHERE applied = 'YES' or applied='IN-MEMORY' GROUP BY thread#) a, 
+(SELECT  thread#, MAX (sequence#) last_seq FROM gv$archived_log GROUP BY thread#) b 
+WHERE a.thread# = b.thread#;  2    3    4    5  
+
+   THREAD#   LAST_SEQ APPLIED_SEQ last_app_timestamp	ARC_DIFF
+---------- ---------- ----------- ------------------- ----------
+	 1	  134	      134 06/17/2023 15:01:34	       0
+
+If there's still a gap, check and set all the corresponding parameter properly.The gap was caused by the log_archive_dest_2 parameter.In my case, i was miss set the log_archive_dest_2 parameter, when in the new primary database set the service and db unique name to the new standby (in my case is ol819 for the standby db).
+
